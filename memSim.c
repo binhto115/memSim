@@ -11,6 +11,13 @@
 #define TOTAL_MEM_SIZE 65536
 //#define PHYSICAL_MEM_SZE 256 * FRAMES
 
+int tlbNext = 0; // global FIFO pointer
+
+int addressesTranslated = 0;
+int pageFaults = 0;
+int tlbHits = 0;
+int tlbMisses = 0;
+
 typedef struct {
     int frame;
     int loaded;
@@ -34,12 +41,20 @@ int in_TLB(int page, TLBEntry *tlb) {
 	return -1;
 }
 
+void tlb_insert(TLBEntry *tlb, int page, int frame) {
+    tlb[tlbNext].page  = page;
+    tlb[tlbNext].frame = frame;
+    tlb[tlbNext].valid = 1;
+    tlbNext = (tlbNext + 1) % 16;
+}
+
 int main(int argc, char *argv[]) {
 	char *fileToRead; // address.txt
 	int frames; // number of frames
 	char *PRA; // FIFO, OPT, or LRU
 
 	int pageTableEntries = 0;
+	
 		
 	
 	// Initialize page table and TLB
@@ -101,7 +116,7 @@ int main(int argc, char *argv[]) {
 
 	// Open file to read
 	//int fd = open(fileToRead, "O_RDONLY");
-	char frame_buffer[255];
+	char frame_buffer[256];
 	char addr_buffer[255];
 
 	FILE *addressesP = fopen(fileToRead, "r");
@@ -130,25 +145,34 @@ int main(int argc, char *argv[]) {
 		int page = logical >> 8;
 		int offset = logical & 0xFF;
 		int frame = -1;
+
+		addressesTranslated += 1;
 		//int offset = atoi(buffer) % 256; Another way to find offset
-		printf("address: %s\n", addr_buffer);
-		printf("page: %d\n", page);
-		printf("Offset: %d\n", offset);
+		//printf("address: %s\n", addr_buffer);
+		//printf("page: %d\n", page);
+		//printf("Offset: %d\n", offset);
 
 		frame = in_TLB(page, tlb);
 		//if frame is not in tlb
 		if (frame == -1) {
+			tlbMisses += 1;
 			// check page table
-			if (pageTable[page].loaded == 1) {
+			if (pageTable[page].loaded) {
 				frame = pageTable[page].frame;
+				tlb_insert(tlb, page, frame);
 			}
 			// if the frame is not in the page table yet
 			else {
+				pageFaults += 1;
 				pageTable[page].frame = pageTableEntries;
 				pageTableEntries += 1;
 				pageTable[page].loaded = 1;	
 				frame = pageTable[page].frame;			
+				tlb_insert(tlb, page, frame);
 			}
+		}
+		else {
+			tlbHits += 1;
 		}
 		fseek(backingStoreP, page * 256, SEEK_SET);
     	// Read 256 bytes into the buffer
@@ -161,8 +185,16 @@ int main(int argc, char *argv[]) {
 			printf("%02X", (unsigned char)frame_buffer[i]);
 		}
 		printf("\n");
+		
 	}
-	
+	printf("Number of Translated Addresses = %d\n", addressesTranslated);
+	printf("Page Faults = %d\n", pageFaults);
+	double pfRate = addressesTranslated / pageFaults;
+	printf("Page Fault Rate = %.3f\n", pfRate);
+	printf("TLB Hits = %d\n", tlbHits);
+	printf("TLB Misses = %d\n", tlbMisses);
+	double tlbHR = tlbHits / (tlbHits + tlbMisses);
+	printf("TLB Hit Rate = %.3f\n", tlbHR);
 	fclose(addressesP);	
 	return 0;
 }
