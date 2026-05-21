@@ -1,12 +1,12 @@
-// ----- Circular Queue Library -----
+// ----- TLB Queue Library -----
 #define _POSIX_C_SOURCE 200809L
 
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "circularQueue.h"
+#include "tlb.h"
 
-int CircularQueue_init(CircularQueue *queue, int size) {
+int tlb_init(tlb *queue, int size) {
 	// Allocate size number of QueueEntry struct
 	queue->entries = malloc(sizeof(QueueEntry) * size);
 	if (!queue->entries) {
@@ -22,15 +22,16 @@ int CircularQueue_init(CircularQueue *queue, int size) {
 		queue->entries[i].frame = -1;
 		queue->entries[i].valid = 0;
 	}
+	return 0;
 }
 
-int CircularQueue_insert(CircularQueue *queue, int page, int frame) {
+int tlb_insert(tlb *queue, int page, int frame) {
 	QueueEntry *entry = &queue->entries[queue->next_replace];
 	
 	entry->page = page;
 	entry->frame = frame;
 	entry->valid = 1;
-	queue->next_replace = (queue->next_replace + 1) % MAX_TLB;
+	queue->next_replace = (queue->next_replace + 1) % queue->sizeQueue;
 	
 	if (queue->countQueue < queue->sizeQueue){
 		queue->countQueue++;
@@ -38,9 +39,9 @@ int CircularQueue_insert(CircularQueue *queue, int page, int frame) {
 	return 0;
 }
 
-int *CircularQueue_get(CircularQueue *queue, int page) {
+int *tlb_get(tlb *queue, int page) {
 	for (int i = 0; i < queue->countQueue; i++) {
-		if (queue->entries[i].page == page) {
+		if (valid && (queue->entries[i].page == page)) {
 			return &queue->entries[i].frame;			
 		}
 	}

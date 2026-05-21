@@ -1,14 +1,19 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include "circularQueue.h"
+#include "tlb.h"
+#include "pageTable.h"
 
 #define PAGE_TABLE_ENTRIES 256
 #define PAGE_SIZE 256
 #define FRAME_SIZE 256
 #define TOTAL_MEM_SIZE 65536
 //#define PHYSICAL_MEM_SZE 256 * FRAMES
+
+//signed char physicalMemory[FRAMES_SIZE][256];
 
 int main(int argc, char *argv[]) {
 	char *fileToRead; // address.txt
@@ -17,8 +22,8 @@ int main(int argc, char *argv[]) {
 	
 
 	// Initialize Queue for TLB
-	CircularQueue queue;
-	CircularQueue_init(&queue, MAX_TLB);
+	tlb queue;
+	tlb_init(&queue, MAX_TLB);
 
 	// Check for arguments
 	if (argc == 2) {
@@ -73,6 +78,7 @@ int main(int argc, char *argv[]) {
 		exit(1);
 	}
 	
+
 	// 2^8 = 256 bytes
 	// Logical address is 16 bits:
 	// Upper 8 bits = page
@@ -89,16 +95,45 @@ int main(int argc, char *argv[]) {
 		printf("page: %d\n", page);
 		printf("Offset: %d\n", offset);
 
-		if (CircularQueue_get(&queue, page) > 0) {
-			char *page_hit = "PAGE HIT\n";
+		if (tlb_get(&queue, page) > 0) {
+			char *page_hit = "TLB HIT\n";
 
 		} else {
+			// Page fault
+			int fd = open("BACKING_STORE.bin", O_RDONLY);
+			off_t jumpTo = lseek(fd, page * 256, SEEK_SET); // move pointer to page from the start
+			if (jumpTo == -1) {
+				fprintf(stderr, "ERROR: lseek()\n");
+			}
+			char buffer[255];
+			ssize_t backingStoreRead = read(fd, buffer, 256); // Read a page (256) to buffer
+			if (backingStoreRead > 0) {
+				buffer[backingStoreRead] = '0';
+			}	
+			for (int i = 0; i < 256; i++) {
+				printf("%02X", (unsigned char)buffer[i]);
+				//printf("%d", buffer[i]);
+			}
+			printf("\n");	
 			// Insert into the TLB
-			CircularQueue_insert(&queue, page, offset);
+			tlb_insert(&queue, page, offset);
 			printf("inserted: page %d with offset %d\n", page, offset);
 		}
 
 	}
+	
+	// Test Queue
+	int *result = tlb_get(&queue, 71);
+	printf("Result is: %d\n", *result);
+
+	PageTable_init();
+	if (PageTable_set(10, 5) == 0) {
+		printf("yes\n");
+	}
+	
+	int look_up = PageTable_look_up(1);
+	printf("Frame: %d\n", look_up);
+		
 	
 	fclose(fptr);	
 	return 0;

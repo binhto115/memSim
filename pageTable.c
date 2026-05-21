@@ -6,47 +6,27 @@
 #include <stdlib.h>
 #include "pageTable.h"
 
-PageTable pageTable;
+// Initialize all 256 structs and their members to 0
+struct PageTable pageTable[MAX_PAGE_TABLE] = {0};
 
 int PageTable_init() {
-	// Allocate size number of QueueEntry struct
-	pageTable->entries = malloc(sizeof(QueueEntry) * size);
-	if (!queue->entries) {
-		return -1;
+	for (int i=0; i < MAX_PAGE_TABLE; i++) {
+		pageTable[i].frame = -1;
 	}
 
-	pageTable->sizeQueue = MAX_PAGE_TABLE;
-	queue->countQueue = 0;
-	queue->next_replace = 0;
-
-	for (int i = 0; i < size; i++) {
-		queue->entries[i].page = -1;
-		queue->entries[i].frame = -1;
-		queue->entries[i].valid = 0;
-	}
+	return 0;
 }
 
 int PageTable_set(int page, int frame) {
-	QueueEntry *entry = &queue->entries[queue->next_replace];
+	pageTable[page].frame = frame;
+	pageTable[page].loaded = 1;
 	
-	entry->page = page;
-	entry->frame = frame;
-	entry->valid = 1;
-	queue->next_replace = (queue->next_replace + 1) % MAX_TLB;
-	
-	if (queue->countQueue < queue->sizeQueue){
-		queue->countQueue++;
-	}
 	return 0;
 }
 
-int *CircularQueue_get(CircularQueue *queue, int page) {
-	for (int i = 0; i <= queue->countQueue; i++) {
-		if (queue->entries[i].page == page) {
-			return &queue->entries[i].frame;			
-		}
-	}
-	return 0;
+int PageTable_look_up(int page) {
+	int frame = pageTable[page].frame;
+	return frame;
 	
 }
 
