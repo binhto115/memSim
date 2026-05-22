@@ -190,9 +190,9 @@ int main(int argc, char *argv[]) {
 		}	
 	}
 
-	for (int i = 0; i < OPTCount; i++) {
-		printf("Page: %d\n", futurePageRead[i]);
-	}
+	// for (int i = 0; i < OPTCount; i++) {
+	// 	printf("Page: %d\n", futurePageRead[i]);
+	// }
 
 	char addr_buffer[255]; // Buffer to store sequence to red
 	fseek(addressesP, 0, SEEK_SET); // Move pointer back to the beginning of the file
@@ -202,7 +202,8 @@ int main(int argc, char *argv[]) {
 		int offset = logical & 0xFF; // Offset of sequence
 		int frame = -1; // Keep track of frame 
 
-		OPTIndex++;
+		int currentIndex = OPTIndex;
+		OPTIndex++;	// Increment OPT index for the next check
 		addressesTranslated++; // Increment the translated address count
 
 		// 1. Check TLB
@@ -258,29 +259,31 @@ int main(int argc, char *argv[]) {
 						printf("EVICTION3 ==> frame: %d\n", frame);
 						evictedPage = frameToPage[frame];
 					} else if (strcmp(PRA, "OPT") == 0) {
-						printf("HERE\n");
-						printf("frames: %d\n", frames);
+						printf("Current page: %d\n", page);
 						int farthestDistance = -1;
 						int victimFrame = -1;
 						for (int i = 0; i < frames; i++) {
-							// [66, 244, 117, 209, 156, 112, 45, 66, 253, 71]
-							int pageToCheck = frameToPage[i]; //page 66
+							int pageToCheck = frameToPage[i]; 
 							printf("pageToCheck %d\n", pageToCheck);
 							int currentDistance = 9999;
-							for (int j = OPTIndex + 1; j < OPTCount; j++) {
-								printf("j: %d\n", j);
-								printf("OPTCount:%d\n", OPTCount);
+							
+							// Get the index of the current page to calculate distance from there
+							for (int j = currentIndex + 1; j < OPTCount; j++) {
 								if (futurePageRead[j] == pageToCheck) {
-									currentDistance = j - OPTIndex;
+									currentDistance = j - currentIndex;
 									break;
 								}
 							}		
+							
+							// Everytime we get a frame match in the future, set it distance as farthest if it's > previous frame match
 							if (currentDistance > farthestDistance) {
 								farthestDistance = currentDistance;
 								victimFrame = i;
 							}
 						}
 						frame = victimFrame;
+						printf("evicted frame: %d\n", frame);
+						evictedPage = frameToPage[frame];
 					}	
 					// Unload evicted page from page table and TLB
 					pageTable[evictedPage].loaded = 0;
@@ -317,11 +320,10 @@ int main(int argc, char *argv[]) {
 
 		//PRINTS WITH FULL PAGE
 
-		printf("%s, %d, %d, ", addr_buffer, value, frame);
-		for (int i = 0; i < 256; i++) {
-			printf("%02X", (unsigned char)physicalMemory[frame][i]);
-		}
-		printf("\n");	
+		// printf("%s, %d, %d, ", addr_buffer, value, frame);
+		// for (int i = 0; i < 256; i++) {
+		// 	printf("%02X", (unsigned char)physicalMemory[frame][i]);
+		// }
 		printf("frame: %d\n", frame);
 		printf("page: %d\n", page);
 
