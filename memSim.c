@@ -11,12 +11,17 @@
 #define TOTAL_MEM_SIZE 65536
 #define TLB_SIZE 16
 
+
 int tlbNext = 0; // global FIFO pointer
 
 int addressesTranslated = 0; // Tracks number of translated addresses
 int pageFaults = 0; // Tracks number of page faults
 int tlbHits = 0; // Track number of tlb hits
 int tlbMisses = 0; // Track number of tlb misses
+
+int OPTQueue = 10; // Define size of queue to store future readings
+int OPTCount = 0; // To keep track of size
+int OPTIndex = 0;
 
 // ----- PageTable Struct -----
 typedef struct {
@@ -137,10 +142,10 @@ int main(int argc, char *argv[]) {
 	}
 
 	// LRU queue: lastUsedFrame[frameIdex] = which frame is stored there
-	int lastUsedFrame[FRAME_SIZE];
+	int lastUsedFrame[frames];
 	int lastUsedFrameCounter = 0;	
 	for (int i = 0; i < frames; i ++) {
-		lastUsedFrame[i] = 0;
+		lastUsedFrame[i] = -1;
 
 	}
 
@@ -154,26 +159,59 @@ int main(int argc, char *argv[]) {
 	// Read BackingStore
 	FILE *backingStoreP = fopen("BACKING_STORE.bin", "rb");
 	if (backingStoreP == NULL) {
-		perror("Error opening BACKING_STORE.bin");
+		fprintf(stderr, "ERROR: opening BACKING_STORE.bin");
 		exit(1);
 	}
 
+
+	// Init page array size to store god knows how many sequences they gonna test
+	int *futurePageRead = malloc(sizeof(int) * OPTQueue);
+
+	// Save every sequence into an array for OPT
+	if (strcmp(PRA, "OPT") == 0) {
+		if (futurePageRead == NULL) {
+			fprintf(stderr, "ERROR: malloc failed\n");
+			exit(1);
+		}
+		char sequence_buffer[255];
+		while (fgets(sequence_buffer, sizeof(sequence_buffer), addressesP)) {
+			futurePageRead[OPTCount] = (atoi(sequence_buffer) >> 8); // Store pages at current count 
+			OPTCount++;
+
+			if (OPTCount == OPTQueue) {	
+				OPTQueue *=2; // Increase size by two
+				futurePageRead = realloc(futurePageRead, sizeof(int) * OPTQueue);
+				
+				if (futurePageRead == NULL) {
+					fprintf(stderr, "ERROR: realloc failed\n");
+					exit(1);
+    			}
+			}
+		}	
+	}
+
+	for (int i = 0; i < OPTCount; i++) {
+		printf("Page: %d\n", futurePageRead[i]);
+	}
+
 	char addr_buffer[255]; // Buffer to store sequence to red
+	fseek(addressesP, 0, SEEK_SET); // Move pointer back to the beginning of the file
 	while (fgets(addr_buffer, sizeof(addr_buffer), addressesP)) {
 		int logical = atoi(addr_buffer); // Logical sequence
 		int page = logical >> 8; // Page of sequence
 		int offset = logical & 0xFF; // Offset of sequence
 		int frame = -1; // Keep track of frame 
 
+		OPTIndex++;
 		addressesTranslated++; // Increment the translated address count
 
 		// 1. Check TLB
 		frame = in_TLB(tlb, page); // Find frame based on page
 		if (frame != -1) {
 			tlbHits++;
-			
+
 			// LRU check
-			timeCounter++;
+			lastUsedFrameCounter++;
 			if (strcmp(PRA, "LRU") == 0) {
 				lastUsedFrame[frame] = lastUsedFrameCounter;
 			}
@@ -186,9 +224,9 @@ int main(int argc, char *argv[]) {
 				tlb_insert(tlb, page, frame);
 				
 				// LRU check
-				timeCounter++;	
+				lastUsedFrameCounter++;	
 				if (strcmp(PRA, "LRU") == 0) {
-					lastUsedFrame[frame] = LastUsedFrameCounter;
+					lastUsedFrame[frame] = lastUsedFrameCounter;
 				}
 			} else { // the page is not loaded in the pageTable
 				// 3. Page fault — load from backing store
@@ -198,26 +236,52 @@ int main(int argc, char *argv[]) {
 					// Free frames still available
 					frame = framesUsed; // set frame currently used = framesUsed
 					framesUsed++; // Increment frameUsed count
+					printf("here\n");
 				} else {
 					// No free frames — evict oldest (FIFO)
 					int evictedPage;
 					if (strcmp(PRA, "FIFO") == 0) {
 						frame = fifoHead;
-						fifoHead = (fifoHead + 1) % frames;
 						evictedPage = frameToPage[fifoHead];
+						fifoHead = (fifoHead + 1) % frames;
+
 					} else if (strcmp(PRA, "LRU") == 0) {
-						int victim = 0;
-						for (int i = 0; i < FRAME_SIZE; i++) {
-							if (lastUsedFrame[i] < lastUsedFrame[victim]) {
-								victim = lastUsedFrame[i];
+						printf("EVICTION\n");
+						int victimFrame = 0;
+						for (int i = 0; i < frames; i++) {
+							printf("EVICTION2\n");
+							if (lastUsedFrame[i] < lastUsedFrame[victimFrame]) {
+								victimFrame = i;
 							}
 						}
-						frame = victim; 
+						frame = victimFrame; 
+						printf("EVICTION3 ==> frame: %d\n", frame);
 						evictedPage = frameToPage[frame];
-					} // else if (strcmp(PRA, "OPT") == 0) {
-					
-					// }
-
+					} else if (strcmp(PRA, "OPT") == 0) {
+						printf("HERE\n");
+						printf("frames: %d\n", frames);
+						int farthestDistance = -1;
+						int victimFrame = -1;
+						for (int i = 0; i < frames; i++) {
+							// [66, 244, 117, 209, 156, 112, 45, 66, 253, 71]
+							int pageToCheck = frameToPage[i]; //page 66
+							printf("pageToCheck %d\n", pageToCheck);
+							int currentDistance = 9999;
+							for (int j = OPTIndex + 1; j < OPTCount; j++) {
+								printf("j: %d\n", j);
+								printf("OPTCount:%d\n", OPTCount);
+								if (futurePageRead[j] == pageToCheck) {
+									currentDistance = j - OPTIndex;
+									break;
+								}
+							}		
+							if (currentDistance > farthestDistance) {
+								farthestDistance = currentDistance;
+								victimFrame = i;
+							}
+						}
+						frame = victimFrame;
+					}	
 					// Unload evicted page from page table and TLB
 					pageTable[evictedPage].loaded = 0;
 					pageTable[evictedPage].frame  = -1;
@@ -238,9 +302,11 @@ int main(int argc, char *argv[]) {
 				// Update the TLB 
 				tlb_insert(tlb, page, frame);
 				
+
 				lastUsedFrameCounter++;
-				if (strcmp(PRA, "LUR") == 0) { 
+				if (strcmp(PRA, "LRU") == 0) { 
 					lastUsedFrame[frame] = lastUsedFrameCounter;
+					printf("Frame %d, count: %d\n", frame, lastUsedFrame[frame]);
 				}
 			}
 		}
@@ -269,6 +335,7 @@ int main(int argc, char *argv[]) {
 	printf("TLB Misses = %d\n", tlbMisses);
 	printf("TLB Hit Rate = %.3f\n", (double)tlbHits / addressesTranslated);
 
+	free(futurePageRead);
 	fclose(addressesP);
 	fclose(backingStoreP);
 	return 0;
