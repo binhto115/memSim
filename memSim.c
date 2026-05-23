@@ -3,14 +3,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-#include "circularQueue.h"
-
-#define PAGE_TABLE_ENTRIES 256
-#define PAGE_SIZE 256
-#define FRAME_SIZE 256
-#define TOTAL_MEM_SIZE 65536
-#define TLB_SIZE 16
-
+#include "memSim.h"
 
 int tlbNext = 0; // global FIFO pointer
 
@@ -22,20 +15,6 @@ int tlbMisses = 0; // Track number of tlb misses
 int OPTQueue = 10; // Define size of queue to store future readings
 int OPTCount = 0; // To keep track of size
 int OPTIndex = 0;
-
-// ----- PageTable Struct -----
-typedef struct {
-    int frame;
-    int loaded;
-} PageTableEntry;
-
-// ----- TLB Struct -----
-typedef struct {
-	int page;
-	int frame;
-	int valid;
-} TLB_Entry;
-
 
 // ----- TLB functions -----
 // If in tlb, return frame number, otherwise return -1
@@ -161,13 +140,14 @@ int main(int argc, char *argv[]) {
 	} else if (argc == 4) {
 		fileToRead = argv[1];
 		frames = atoi(argv[2]);
+		if (frames <= 0 || frames > 256) {
+			fprintf(stderr, "Error: 0 < frames <= 256\n");
+			exit(1);
+		}
+
 		PRA = argv[3];
 		if (strcmp(PRA, "fifo") != 0 && strcmp(PRA, "lru") != 0 && strcmp(PRA, "opt") != 0) {
 			fprintf(stderr, "ERROR: check your replace algorithm.\n");
-			exit(1);
-		}
-		if (frames <= 0 || frames > 256) {
-			fprintf(stderr, "Error: 0 < frames <= 256\n");
 			exit(1);
 		}
 
@@ -175,7 +155,7 @@ int main(int argc, char *argv[]) {
 		// printf("Number of frames: %d\n", frames);
 		// printf("PRA: %s\n", PRA);
 	} else {
-		//fprintf(stderr, "Error: invalid number of arguments.\n");
+		fprintf(stderr, "Error: invalid number of arguments.\n");
 		exit(1);
 	}
 
@@ -193,7 +173,6 @@ int main(int argc, char *argv[]) {
 	int lastUsedFrameCounter = 0;	
 	for (int i = 0; i < frames; i ++) {
 		lastUsedFrame[i] = -1;
-
 	}
 
 	// Read sequence file
@@ -287,7 +266,7 @@ int main(int argc, char *argv[]) {
 					//printf("here\n");
 				} else {
 					// No free frames — eviction!!!
-					int evictedPage;
+					int evictedPage = -1;
 					if (strcmp(PRA, "fifo") == 0) {
 						frame = fifo_victim(&fifoHead, frames);
 						evictedPage = frameToPage[frame];
