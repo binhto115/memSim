@@ -67,6 +67,50 @@ void tlb_invalidate(TLB_Entry *tlb, int page) {
 	}
 }
 
+// FIFO victim Function
+int fifo_victim(int *fifoHead, int frames) {
+	int victim = *fifoHead; 
+	*fifoHead = (*fifoHead + 1) % frames;
+	return victim;
+}
+
+// LRU victim Function
+int lru_victim(int *lastUsedFrame, int frames) {
+	int victimFrame = 0;
+	for (int i = 0; i < frames; i++) {
+		//printf("EVICTION2\n");
+		if (lastUsedFrame[i] < lastUsedFrame[victimFrame]) {
+			victimFrame = i;
+		}
+	}
+	return victimFrame;
+}
+
+// OPT victim Function
+int opt_victim(int *frameToPage, int frames, int *futurePageRead, int OPTCount, int currentIndex) { 
+	int farthestDistance = -1;
+	int victimFrame = -1;
+	for (int i = 0; i < frames; i++) {
+		int pageToCheck = frameToPage[i]; 
+		int currentDistance = 9999;
+		
+		// Get the index of the current page to calculate distance from there
+		for (int j = currentIndex + 1; j < OPTCount; j++) {
+			if (futurePageRead[j] == pageToCheck) {
+				currentDistance = j - currentIndex;
+				break;
+			}
+		}		
+		
+		// Everytime we get a frame match in the future, set it distance as farthest if it's > previous frame match
+		if (currentDistance > farthestDistance) {
+			farthestDistance = currentDistance;
+			victimFrame = i;
+		}
+	}
+	return victimFrame;
+}
+
 int main(int argc, char *argv[]) {
 	char *fileToRead; // File of sequences to read
 	int frames; // Frame to track
@@ -96,39 +140,42 @@ int main(int argc, char *argv[]) {
 	if (argc == 2) {
 		fileToRead = argv[1];
 		frames = 256;
-		PRA = "FIFO";
+		PRA = "fifo";
 
-		printf("File: %s\n", fileToRead);
-		printf("PRA: %s\n", PRA);
-		printf("\n");
+		// printf("File: %s\n", fileToRead);
+		// printf("PRA: %s\n", PRA);
+		// printf("\n");
 	} else if (argc == 3) {
 		fileToRead = argv[1];
 		frames = atoi(argv[2]);
-		PRA = "FIFO";
+		PRA = "fifo";
 
 		if (frames <= 0 || frames > 256) {
 			fprintf(stderr, "Error: 0 < frames <= 256\n");
 			exit(1);
 		}
 
-		printf("File: %s\n", fileToRead);
-		printf("Number of frames: %d\n", frames);
-		printf("PRA: %s\n", PRA);
+		// printf("File: %s\n", fileToRead);
+		// printf("Number of frames: %d\n", frames);
+		// printf("PRA: %s\n", PRA);
 	} else if (argc == 4) {
 		fileToRead = argv[1];
 		frames = atoi(argv[2]);
 		PRA = argv[3];
-
+		if (strcmp(PRA, "fifo") != 0 && strcmp(PRA, "lru") != 0 && strcmp(PRA, "opt") != 0) {
+			fprintf(stderr, "ERROR: check your replace algorithm.\n");
+			exit(1);
+		}
 		if (frames <= 0 || frames > 256) {
 			fprintf(stderr, "Error: 0 < frames <= 256\n");
 			exit(1);
 		}
 
-		printf("File: %s\n", fileToRead);
-		printf("Number of frames: %d\n", frames);
-		printf("PRA: %s\n", PRA);
+		// printf("File: %s\n", fileToRead);
+		// printf("Number of frames: %d\n", frames);
+		// printf("PRA: %s\n", PRA);
 	} else {
-		fprintf(stderr, "Error: invalid number of arguments.\n");
+		//fprintf(stderr, "Error: invalid number of arguments.\n");
 		exit(1);
 	}
 
@@ -168,7 +215,7 @@ int main(int argc, char *argv[]) {
 	int *futurePageRead = malloc(sizeof(int) * OPTQueue);
 
 	// Save every sequence into an array for OPT
-	if (strcmp(PRA, "OPT") == 0) {
+	if (strcmp(PRA, "opt") == 0) {
 		if (futurePageRead == NULL) {
 			fprintf(stderr, "ERROR: malloc failed\n");
 			exit(1);
@@ -213,7 +260,7 @@ int main(int argc, char *argv[]) {
 
 			// LRU check
 			lastUsedFrameCounter++;
-			if (strcmp(PRA, "LRU") == 0) {
+			if (strcmp(PRA, "lru") == 0) {
 				lastUsedFrame[frame] = lastUsedFrameCounter;
 			}
 		} else {
@@ -226,7 +273,7 @@ int main(int argc, char *argv[]) {
 				
 				// LRU check
 				lastUsedFrameCounter++;	
-				if (strcmp(PRA, "LRU") == 0) {
+				if (strcmp(PRA, "lru") == 0) {
 					lastUsedFrame[frame] = lastUsedFrameCounter;
 				}
 			} else { // the page is not loaded in the pageTable
@@ -237,52 +284,18 @@ int main(int argc, char *argv[]) {
 					// Free frames still available
 					frame = framesUsed; // set frame currently used = framesUsed
 					framesUsed++; // Increment frameUsed count
-					printf("here\n");
+					//printf("here\n");
 				} else {
-					// No free frames — evict oldest (FIFO)
+					// No free frames — eviction!!!
 					int evictedPage;
-					if (strcmp(PRA, "FIFO") == 0) {
-						frame = fifoHead;
-						evictedPage = frameToPage[fifoHead];
-						fifoHead = (fifoHead + 1) % frames;
-
-					} else if (strcmp(PRA, "LRU") == 0) {
-						printf("EVICTION\n");
-						int victimFrame = 0;
-						for (int i = 0; i < frames; i++) {
-							printf("EVICTION2\n");
-							if (lastUsedFrame[i] < lastUsedFrame[victimFrame]) {
-								victimFrame = i;
-							}
-						}
-						frame = victimFrame; 
-						printf("EVICTION3 ==> frame: %d\n", frame);
+					if (strcmp(PRA, "fifo") == 0) {
+						frame = fifo_victim(&fifoHead, frames);
 						evictedPage = frameToPage[frame];
-					} else if (strcmp(PRA, "OPT") == 0) {
-						printf("Current page: %d\n", page);
-						int farthestDistance = -1;
-						int victimFrame = -1;
-						for (int i = 0; i < frames; i++) {
-							int pageToCheck = frameToPage[i]; 
-							printf("pageToCheck %d\n", pageToCheck);
-							int currentDistance = 9999;
-							
-							// Get the index of the current page to calculate distance from there
-							for (int j = currentIndex + 1; j < OPTCount; j++) {
-								if (futurePageRead[j] == pageToCheck) {
-									currentDistance = j - currentIndex;
-									break;
-								}
-							}		
-							
-							// Everytime we get a frame match in the future, set it distance as farthest if it's > previous frame match
-							if (currentDistance > farthestDistance) {
-								farthestDistance = currentDistance;
-								victimFrame = i;
-							}
-						}
-						frame = victimFrame;
-						printf("evicted frame: %d\n", frame);
+					} else if (strcmp(PRA, "lru") == 0) {
+						frame = lru_victim(lastUsedFrame, frames); 
+						evictedPage = frameToPage[frame];
+					} else if (strcmp(PRA, "opt") == 0) {
+						frame = opt_victim(frameToPage, frames, futurePageRead, OPTCount, currentIndex);
 						evictedPage = frameToPage[frame];
 					}	
 					// Unload evicted page from page table and TLB
@@ -307,9 +320,9 @@ int main(int argc, char *argv[]) {
 				
 
 				lastUsedFrameCounter++;
-				if (strcmp(PRA, "LRU") == 0) { 
+				if (strcmp(PRA, "lru") == 0) { 
 					lastUsedFrame[frame] = lastUsedFrameCounter;
-					printf("Frame %d, count: %d\n", frame, lastUsedFrame[frame]);
+					//printf("Frame %d, count: %d\n", frame, lastUsedFrame[frame]);
 				}
 			}
 		}
@@ -319,13 +332,12 @@ int main(int argc, char *argv[]) {
 		addr_buffer[strcspn(addr_buffer, "\n")] = 0;
 
 		//PRINTS WITH FULL PAGE
-
-		// printf("%s, %d, %d, ", addr_buffer, value, frame);
-		// for (int i = 0; i < 256; i++) {
-		// 	printf("%02X", (unsigned char)physicalMemory[frame][i]);
-		// }
-		printf("frame: %d\n", frame);
-		printf("page: %d\n", page);
+		printf("%s, %d, %d, ", addr_buffer, value, frame);
+		for (int i = 0; i < 256; i++) {	
+			printf("%02X", (unsigned char)physicalMemory[frame][i]);
+		}
+		// printf("frame: %d\n", frame);
+		// printf("page: %d\n", page);
 
 		printf("\n");
 	}
