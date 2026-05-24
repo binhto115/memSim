@@ -42,6 +42,6 @@ int fifo_victim(int *fifoHead, int frames);
 int lru_victim(int *lastUsedFrame, int frames);
 
 // OPT victim Function
-int opt_victim(int *frameToPage, int frames, int *futurePageRead, int OPTCount, int currentIndex);
+int opt_victim(int *frameToPage, int frames, int *futurePageRead, int OPTCount, int currentIndex, int *frameAge);
 
 #endif

@@ -66,28 +66,29 @@ int lru_victim(int *lastUsedFrame, int frames) {
 }
 
 // OPT victim Function
-int opt_victim(int *frameToPage, int frames, int *futurePageRead, int OPTCount, int currentIndex) { 
-	int farthestDistance = -1;
-	int victimFrame = -1;
-	for (int i = 0; i < frames; i++) {
-		int pageToCheck = frameToPage[i]; 
-		int currentDistance = 9999;
-		
-		// Get the index of the current page to calculate distance from there
-		for (int j = currentIndex + 1; j < OPTCount; j++) {
-			if (futurePageRead[j] == pageToCheck) {
-				currentDistance = j - currentIndex;
-				break;
-			}
-		}		
-		
-		// Everytime we get a frame match in the future, set it distance as farthest if it's > previous frame match
-		if (currentDistance > farthestDistance) {
-			farthestDistance = currentDistance;
-			victimFrame = i;
-		}
-	}
-	return victimFrame;
+int opt_victim(int *frameToPage, int frames, int *futurePageRead,
+               int OPTCount, int currentIndex, int *frameAge) {
+    int farthestDistance = -1;
+    int victimFrame = -1;
+
+    for (int i = 0; i < frames; i++) {
+        int pageToCheck = frameToPage[i];
+        int currentDistance = 9999;
+
+        for (int j = currentIndex + 1; j < OPTCount; j++) {
+            if (futurePageRead[j] == pageToCheck) {
+                currentDistance = j - currentIndex;
+                break;
+            }
+        }
+
+        if (currentDistance > farthestDistance ||
+           (currentDistance == farthestDistance && frameAge[i] < frameAge[victimFrame])) {
+            farthestDistance = currentDistance;
+            victimFrame = i;
+        }
+    }
+    return victimFrame;
 }
 
 int main(int argc, char *argv[]) {
@@ -170,6 +171,11 @@ int main(int argc, char *argv[]) {
 
 	// LRU queue: lastUsedFrame[frameIdex] = which frame is stored there
 	int lastUsedFrame[frames];
+
+	int frameAge[256];
+	for (int i = 0; i < frames; i++) frameAge[i] = 0;
+	int frameAgeCounter = 0;
+
 	int lastUsedFrameCounter = 0;	
 	for (int i = 0; i < frames; i ++) {
 		lastUsedFrame[i] = -1;
@@ -274,7 +280,7 @@ int main(int argc, char *argv[]) {
 						frame = lru_victim(lastUsedFrame, frames); 
 						evictedPage = frameToPage[frame];
 					} else if (strcmp(PRA, "opt") == 0) {
-						frame = opt_victim(frameToPage, frames, futurePageRead, OPTCount, currentIndex);
+						frame = opt_victim(frameToPage, frames, futurePageRead, OPTCount, currentIndex, frameAge);
 						evictedPage = frameToPage[frame];
 					}	
 					// Unload evicted page from page table and TLB
@@ -297,6 +303,8 @@ int main(int argc, char *argv[]) {
 				// Update the TLB 
 				tlb_insert(tlb, page, frame);
 				
+				frameAge[frame] = frameAgeCounter++;
+
 
 				lastUsedFrameCounter++;
 				if (strcmp(PRA, "lru") == 0) { 
@@ -315,8 +323,7 @@ int main(int argc, char *argv[]) {
 		for (int i = 0; i < 256; i++) {	
 			printf("%02X", (unsigned char)physicalMemory[frame][i]);
 		}
-		// printf("frame: %d\n", frame);
-		// printf("page: %d\n", page);
+		//printf("\nframe: %d\n", frame);
 
 		printf("\n");
 	}
