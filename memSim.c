@@ -66,8 +66,7 @@ int lru_victim(int *lastUsedFrame, int frames) {
 }
 
 // OPT victim Function
-int opt_victim(int *frameToPage, int frames, int *futurePageRead,
-               int OPTCount, int currentIndex, int *frameAge) {
+int opt_victim(int *frameToPage, int frames, int *futurePageRead, int OPTCount, int currentIndex, int *frameAge) {
     int farthestDistance = -1;
     int victimFrame = -1;
 
@@ -82,8 +81,7 @@ int opt_victim(int *frameToPage, int frames, int *futurePageRead,
             }
         }
 
-        if (currentDistance > farthestDistance ||
-           (currentDistance == farthestDistance && frameAge[i] < frameAge[victimFrame])) {
+        if (currentDistance > farthestDistance || (currentDistance == farthestDistance && frameAge[i] < frameAge[victimFrame])) {
             farthestDistance = currentDistance;
             victimFrame = i;
         }

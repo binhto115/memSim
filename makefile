@@ -1,6 +1,6 @@
 CC = gcc
 
-CFLAGS = -Wall -g -I.
+CFLAGS = -Wall -std=c99 -g -I.
 LDFLAGS = -Wall -g
 
 PROGS = memSim
@@ -22,4 +22,4 @@ allclean: clean
 	rm -f project3_submission.tar.gz
 
 submission: memSim.c memSim.h Makefile README.txt
-	tar -czf project3_submission.tar.gz memSim.c memSim.h Makefile README.txt
+	tar -czf project3_submission.tar.gz memSim.c memSim.h Makefile README.txtx	x
